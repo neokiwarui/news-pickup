@@ -103,8 +103,9 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--jp-body
 /* 見出し語つき本文 */
 .fields{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}
 .field{display:flex;gap:16px;align-items:baseline}
-.field-k{flex:0 0 auto;width:5.4em;text-align:right;font-size:12px;font-weight:700;
-  letter-spacing:.05em;line-height:2.55;color:var(--ink-3);white-space:nowrap}
+.field-k{flex:0 0 auto;width:6.4em;text-align:right;font-size:12px;font-weight:700;
+  letter-spacing:.05em;line-height:2.55;color:var(--ink-3);
+  white-space:normal;overflow-wrap:anywhere}
 .field-v{flex:1 1 0%;min-width:0}
 .field.key .field-k{color:var(--ink)}
 @media (max-width:620px){
@@ -370,10 +371,12 @@ tbody tr:last-child td{border-bottom:0}
                   t3.match(/^(出典|ソース|論調の違い|論調の割れ|数字の更新について)\s*[:：]\s*([\s\S]*)$/);
           var role = 'li', key = '', val = t3;
           if (f) {
-            key = clean(f[1].replace(/\*\*/g, '')); val = f[2];
-            if (/^(出典|ソース)$/.test(key)) role = 'sources';
-            else if (/論調|数字の更新/.test(key)) role = 'note';
-            else role = 'field';
+            var k2 = clean(f[1].replace(/\*\*/g, ''));
+            if (/^(出典|ソース)$/.test(k2)) { role = 'sources'; key = k2; val = f[2]; }
+            else if (/論調|数字の更新/.test(k2)) { role = 'note'; key = k2; val = f[2]; }
+            else if (k2.length <= 8) { role = 'field'; key = k2; val = f[2]; }
+            // 8文字を超える太字は「何が／なぜ重要」ではなく話題名。
+            // 見出し語コラムに押し込まず、太字のまま箇条書きにする。
           }
           var last = groups[groups.length - 1];
           if (last && last.role === role && (role === 'field' || role === 'li')) {
@@ -574,7 +577,19 @@ tbody tr:last-child td{border-bottom:0}
     else elDoc.innerHTML = '<p class="state">まだレポートがありません。<b>平日の朝7時</b>に最初の日次が入ります。</p>';
   }
 
-  window.addEventListener('hashchange', route);
+  // 目次はページ内スクロール。URLの # は触らない
+  elToc.addEventListener('click', function (e) {
+    var a = e.target.closest('a');
+    if (!a) return;
+    e.preventDefault();
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // 記事の切り替え（#p=…）のときだけ読み直す
+  window.addEventListener('hashchange', function () {
+    if (!location.hash || /^#p=/.test(location.hash)) route();
+  });
 
   loadIndex()
     .then(function (paths) { buildIndex(paths); drawEntries(); route(); })
