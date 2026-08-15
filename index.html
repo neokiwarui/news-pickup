@@ -228,6 +228,11 @@ tbody tr:last-child td{border-bottom:0}
   function slug(s) {
     return 's-' + s.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase();
   }
+  // 見出しの絵文字は落とす（Markdown側には残しておき、表示だけ外す）
+  function clean(s) {
+    return s.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}\u{20E3}]/gu, '')
+            .replace(/\s+/g, ' ').trim();
+  }
   function isTableSep(l) { return /^\|[\s:|-]+\|?\s*$/.test(l) && l.indexOf('-') > -1; }
   function cells(l) {
     return l.replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
@@ -237,6 +242,8 @@ tbody tr:last-child td{border-bottom:0}
     var lines = md.replace(/\r/g, '').split('\n');
     var out = [], toc = [], i = 0;
     var head = { title: '', meta: '' };
+    var ledeOpen = false;
+    function closeLede() { if (ledeOpen) { out.push('</div>'); ledeOpen = false; } }
 
     // 先頭の h1 と直後の <sub> を題字に回す
     while (i < lines.length && !lines[i].trim()) i++;
@@ -261,7 +268,8 @@ tbody tr:last-child td{border-bottom:0}
                       tip: 'ヒント', caution: '警告' }[kind];
         var first = body.length ? body[0] : '';
         var lm = first.match(/^\*\*(.+?)\*\*\s*(.*)$/);
-        if (lm && lm[1].length <= 16) { label = lm[1]; body[0] = lm[2]; }
+        // IMPORTANT は中身の1本目が見出しなので、ラベルとして食わない
+        if (kind !== 'important' && lm && lm[1].length <= 16) { label = clean(lm[1]); body[0] = lm[2]; }
         var paras = body.join('\n').split(/\n\s*\n/).filter(function (p) { return p.trim(); });
         out.push('<div class="alert ' + kind + '"><span class="alert-k">' + esc(label) + '</span>' +
                  paras.map(function (p) { return '<p>' + inline(p.replace(/\n/g, ' ')) + '</p>'; }).join('') + '</div>');
@@ -285,7 +293,13 @@ tbody tr:last-child td{border-bottom:0}
       // 見出し
       var hm = L.match(/^(#{2,4})\s+(.*)$/);
       if (hm) {
-        var lv = hm[1].length, txt = hm[2].trim();
+        var lv = hm[1].length, txt = clean(hm[2]);
+        closeLede();
+        // 旧形式の「## 今日これだけは」も朱の枠で組む
+        if (lv === 2 && /今日これだけは|今週を一行で|この月を一行で/.test(txt)) {
+          out.push('<div class="alert important"><span class="alert-k">' + esc(txt) + '</span>');
+          ledeOpen = true; i++; continue;
+        }
         var id = slug(txt);
         out.push('<h' + lv + ' id="' + id + '">' + inline(txt) + '</h' + lv + '>');
         if (lv === 2) toc.push({ id: id, text: txt });
@@ -293,7 +307,10 @@ tbody tr:last-child td{border-bottom:0}
       }
 
       // 罫
-      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(L)) { out.push('<hr>'); i++; continue; }
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(L)) {
+        if (ledeOpen) closeLede(); else out.push('<hr>');
+        i++; continue;
+      }
 
       // 生HTML行（<details> <summary> </details> <sub> など）
       if (/^\s*<\/?[a-z]/i.test(L) && /$/.test(L)) {
@@ -314,19 +331,53 @@ tbody tr:last-child td{border-bottom:0}
                  !/^\s*(?:[-*]|\d+[.)])\s+/.test(lines[i])) { t2 += lines[i].trim(); i++; }
           items.push(t2);
         }
-        var fm = items.map(function (t3) { return t3.match(/^\*\*(.+?)\*\*\s*[:：]\s*([\s\S]*)$/); });
-        if (!ordered && fm.length >= 2 && fm.every(Boolean)) {
-          out.push('<div class="fields">' + fm.map(function (f) {
-            var key = /なぜ重要/.test(f[1]) ? ' key' : '';
-            return '<div class="field' + key + '"><div class="field-k">' + inline(f[1]) +
-                   '</div><div class="field-v">' + inline(f[2]) + '</div></div>';
-          }).join('') + '</div>');
-        } else {
-          var tag = ordered ? 'ol' : 'ul';
-          out.push('<' + tag + '>' + items.map(function (t4) {
-            return '<li>' + inline(t4) + '</li>';
-          }).join('') + '</' + tag + '>');
+        if (ordered) {
+          out.push('<ol>' + items.map(function (t3) {
+            return '<li>' + inline(t3) + '</li>';
+          }).join('') + '</ol>');
+          continue;
         }
+
+        // 項目ごとに役割を判定し、連続する同種をまとめる。
+        // 出典や論調の違いが同じリストに混ざっていても、見出し語コラムは壊れない。
+        var groups = [];
+        items.forEach(function (t3) {
+          var f = t3.match(/^\*\*(.+?)\*\*\s*[:：]\s*([\s\S]*)$/) ||
+                  t3.match(/^(出典|ソース|論調の違い|論調の割れ|数字の更新について)\s*[:：]\s*([\s\S]*)$/);
+          var role = 'li', key = '', val = t3;
+          if (f) {
+            key = clean(f[1].replace(/\*\*/g, '')); val = f[2];
+            if (/^(出典|ソース)$/.test(key)) role = 'sources';
+            else if (/論調|数字の更新/.test(key)) role = 'note';
+            else role = 'field';
+          }
+          var last = groups[groups.length - 1];
+          if (last && last.role === role && (role === 'field' || role === 'li')) {
+            last.rows.push([key, val]);
+          } else {
+            groups.push({ role: role, rows: [[key, val]] });
+          }
+        });
+
+        groups.forEach(function (g) {
+          if (g.role === 'field') {
+            out.push('<div class="fields">' + g.rows.map(function (r) {
+              return '<div class="field' + (/なぜ重要/.test(r[0]) ? ' key' : '') + '">' +
+                     '<div class="field-k">' + esc(r[0]) + '</div>' +
+                     '<div class="field-v">' + inline(r[1]) + '</div></div>';
+            }).join('') + '</div>');
+          } else if (g.role === 'sources') {
+            out.push('<p class="sources">' + inline(g.rows[0][1]) + '</p>');
+          } else if (g.role === 'note') {
+            var warn = /数字の更新/.test(g.rows[0][0]) ? ' warning' : '';
+            out.push('<div class="alert' + warn + '"><span class="alert-k">' +
+                     esc(g.rows[0][0]) + '</span><p>' + inline(g.rows[0][1]) + '</p></div>');
+          } else {
+            out.push('<ul>' + g.rows.map(function (r) {
+              return '<li>' + inline(r[1]) + '</li>';
+            }).join('') + '</ul>');
+          }
+        });
         continue;
       }
 
@@ -342,6 +393,7 @@ tbody tr:last-child td{border-bottom:0}
       } else { i++; }
     }
 
+    closeLede();
     return { html: out.join('\n'), toc: toc, head: head };
   }
 
