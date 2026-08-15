@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEWS Pick Up</title>
+<meta name="description" content="複数ソースを突き合わせた日次・週間・月間のニュースダイジェスト">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📰</text></svg>">
+<style>
+:root {
+  --paper:#F2F3EE; --card:#FBFBF8; --ink:#191C18; --ink-2:#575C53; --ink-3:#878C82;
+  --rule:#D9DBD1; --rule-soft:#E6E8DF;
+  --vermilion:#BE3A22; --slate:#3E5C74; --slate-bg:#EAEFF3; --ochre:#8A6722; --ochre-bg:#F6F0E2;
+  --shadow:0 1px 2px rgba(25,28,24,.05), 0 8px 24px -12px rgba(25,28,24,.14);
+  --jp-body:"Hiragino Kaku Gothic ProN","HiraKakuProN-W3",Meiryo,メイリオ,"Yu Gothic Medium","Yu Gothic",YuGothic,system-ui,sans-serif;
+  --jp-mincho:"Hiragino Mincho ProN","HiraMinProN-W3","Yu Mincho",YuMincho,serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --measure:35em;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#16180F; --card:#1D1F17; --ink:#E7E9DF; --ink-2:#A6AA9B; --ink-3:#767A6D;
+  --rule:#33362B; --rule-soft:#262920;
+  --vermilion:#E4694E; --slate:#8FB2CC; --slate-bg:#182027; --ochre:#CCA55C; --ochre-bg:#262013;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}}
+:root[data-theme="dark"]{
+  --paper:#16180F; --card:#1D1F17; --ink:#E7E9DF; --ink-2:#A6AA9B; --ink-3:#767A6D;
+  --rule:#33362B; --rule-soft:#262920;
+  --vermilion:#E4694E; --slate:#8FB2CC; --slate-bg:#182027; --ochre:#CCA55C; --ochre-bg:#262013;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--jp-body);
+  font-size:17px;line-height:1.9;letter-spacing:.012em;-webkit-font-smoothing:antialiased}
+
+.shell{display:grid;grid-template-columns:1fr;max-width:1140px;margin:0 auto;padding:0 20px 96px}
+@media (min-width:940px){.shell{grid-template-columns:196px minmax(0,1fr);gap:56px;padding:0 32px 120px}}
+
+/* 題字 */
+.masthead{grid-column:1/-1;border-bottom:2px solid var(--ink);padding:40px 0 18px;
+  display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px 32px}
+.masthead-id{font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--vermilion);margin:0 0 10px}
+.masthead-date{font-family:var(--jp-mincho);font-size:clamp(2.3rem,6.5vw,4rem);font-weight:600;
+  line-height:1;letter-spacing:-.01em;margin:0;font-variant-numeric:tabular-nums}
+.masthead-date .wd{font-size:.34em;font-family:var(--jp-body);font-weight:500;letter-spacing:.08em;
+  color:var(--ink-2);margin-inline-start:.5em;vertical-align:.42em}
+.masthead-meta{font-family:var(--mono);font-size:12px;line-height:1.85;color:var(--ink-2);
+  text-align:right;font-variant-numeric:tabular-nums;padding-bottom:4px}
+
+/* レール */
+.rail{grid-column:1/-1}
+@media (min-width:940px){.rail{grid-column:1;position:sticky;top:24px;align-self:start;
+  padding-top:44px;max-height:calc(100vh - 48px);overflow-y:auto}}
+.tabs{display:flex;gap:2px;margin:24px 0 0;border:1px solid var(--rule);border-radius:2px;
+  padding:2px;background:var(--card);width:fit-content}
+@media (min-width:940px){.tabs{margin-top:0;width:100%}}
+.tab{font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.08em;padding:7px 14px;
+  border:0;border-radius:1px;background:none;color:var(--ink-3);cursor:pointer;flex:1 1 auto;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.tab:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}
+
+.entries{margin:16px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:1px;
+  max-height:34vh;overflow-y:auto}
+@media (min-width:940px){.entries{max-height:38vh}}
+.entries button{width:100%;text-align:left;font-family:inherit;font-size:13px;line-height:1.5;
+  color:var(--ink-2);background:none;border:0;border-left:2px solid transparent;
+  padding:6px 0 6px 12px;cursor:pointer}
+.entries button:hover{color:var(--ink)}
+.entries button[aria-current="true"]{color:var(--vermilion);border-left-color:var(--vermilion);font-weight:700}
+.entries button:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}
+.entries .none{font-size:12.5px;color:var(--ink-3);padding:6px 0 6px 12px;line-height:1.7}
+
+.toc{margin:22px 0 0;padding:14px 0 0;list-style:none;display:none;flex-direction:column;gap:1px;
+  border-top:1px solid var(--rule-soft)}
+@media (min-width:940px){.toc{display:flex}}
+.toc a{font-size:13px;line-height:1.5;color:var(--ink-2);text-decoration:none;
+  padding:6px 0 6px 12px;border-left:2px solid transparent;display:block}
+.toc a:hover{color:var(--ink)}
+.toc a.on{color:var(--vermilion);border-left-color:var(--vermilion);font-weight:700}
+.toc a:focus-visible{outline:2px solid var(--vermilion);outline-offset:1px}
+
+/* 本文 */
+.column{grid-column:1/-1;min-width:0;padding-top:12px}
+@media (min-width:940px){.column{grid-column:2;padding-top:44px}}
+.doc>*{max-width:var(--measure)}
+.doc>.wide{max-width:none}
+
+.doc h2{font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--ink);
+  margin:44px 0 28px;padding-top:40px;border-top:1px solid var(--rule);scroll-margin-top:20px}
+.doc h2:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.doc h3{font-size:20px;font-weight:700;line-height:1.5;letter-spacing:.01em;margin:38px 0 14px;text-wrap:balance}
+.doc h4{font-size:17px;font-weight:700;line-height:1.6;margin:30px 0 12px}
+.doc p{margin:0 0 14px}
+.doc hr{border:0;border-top:1px solid var(--rule-soft);margin:32px 0}
+.doc ul,.doc ol{margin:0 0 16px;padding-left:1.5em;display:flex;flex-direction:column;gap:8px}
+.doc li{min-width:0}
+.doc a{color:var(--slate)}
+.doc code{font-family:var(--mono);font-size:.88em;background:var(--card);
+  border:1px solid var(--rule-soft);border-radius:2px;padding:1px 5px}
+.doc sub{font-size:12.5px;color:var(--ink-3);line-height:1.8;letter-spacing:.02em;vertical-align:baseline}
+
+/* 見出し語つき本文 */
+.fields{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}
+.field{display:flex;gap:16px;align-items:baseline}
+.field-k{flex:0 0 auto;width:5.4em;text-align:right;font-size:12px;font-weight:700;
+  letter-spacing:.05em;line-height:2.55;color:var(--ink-3);white-space:nowrap}
+.field-v{flex:1 1 0%;min-width:0}
+.field.key .field-k{color:var(--ink)}
+@media (max-width:620px){
+  .field{display:block}
+  .field-k{width:auto;text-align:left;line-height:1.6;margin-bottom:2px}
+}
+
+.sources{font-family:var(--mono);font-size:11.5px;line-height:1.8;color:var(--ink-3);
+  margin:16px 0 14px;padding-top:10px;border-top:1px solid var(--rule-soft);word-break:break-word}
+
+/* 注記 */
+.alert{margin:16px 0;padding:14px 18px;border-left:3px solid var(--slate);background:var(--slate-bg);
+  border-radius:0 2px 2px 0;font-size:14.5px;line-height:1.85}
+.alert p{margin:0 0 8px}
+.alert p:last-child{margin-bottom:0}
+.alert-k{display:block;font-size:10.5px;font-weight:700;letter-spacing:.16em;color:var(--slate);margin-bottom:6px}
+.alert.warning,.alert.caution{border-left-color:var(--ochre);background:var(--ochre-bg)}
+.alert.warning .alert-k,.alert.caution .alert-k{color:var(--ochre)}
+.alert.important{border:1px solid var(--rule);border-top:3px solid var(--vermilion);border-left:1px solid var(--rule);
+  background:var(--card);border-radius:2px;box-shadow:var(--shadow);padding:22px 26px 18px;margin:0 0 46px;font-size:16px}
+.alert.important .alert-k{color:var(--vermilion);font-size:11px;letter-spacing:.2em;margin-bottom:12px}
+
+/* 表 */
+.table-wrap{overflow-x:auto;margin:0 0 20px;border:1px solid var(--rule);border-radius:2px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 16px;text-align:right;border-bottom:1px solid var(--rule-soft);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;font-family:var(--jp-body);font-size:12.5px;white-space:normal}
+thead th{font-family:var(--jp-body);font-size:11px;font-weight:700;letter-spacing:.1em;
+  color:var(--ink-3);border-bottom-color:var(--rule)}
+tbody tr:last-child td{border-bottom:0}
+
+/* 折りたたみ */
+.doc details{border:1px solid var(--rule);border-radius:2px;background:var(--card);margin:14px 0}
+.doc summary{font-size:13.5px;font-weight:700;letter-spacing:.04em;padding:14px 18px;cursor:pointer;
+  list-style:none;display:flex;align-items:center;gap:10px}
+.doc summary::-webkit-details-marker{display:none}
+.doc summary::before{content:"＋";font-family:var(--mono);font-size:12px;color:var(--vermilion)}
+.doc details[open] summary::before{content:"−"}
+.doc summary:focus-visible{outline:2px solid var(--vermilion);outline-offset:-2px}
+.doc details>*:not(summary){margin-left:18px;margin-right:18px}
+.doc details>*:last-child{margin-bottom:18px}
+
+/* 状態 */
+.state{font-size:14.5px;color:var(--ink-2);padding:24px 0;line-height:1.9}
+.state b{color:var(--ink)}
+.state code{font-family:var(--mono);font-size:12.5px}
+
+.colophon{grid-column:1/-1;margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);
+  font-family:var(--mono);font-size:11.5px;line-height:1.9;color:var(--ink-3);
+  display:flex;flex-wrap:wrap;gap:6px 28px;justify-content:space-between}
+.colophon a{color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto !important}}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header class="masthead">
+    <div>
+      <p class="masthead-id" id="kind">NEWS PICK UP</p>
+      <h1 class="masthead-date" id="title">読み込み中</h1>
+    </div>
+    <div class="masthead-meta" id="meta"></div>
+  </header>
+
+  <nav class="rail" aria-label="記事ナビゲーション">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-kind="daily" aria-selected="true">日次</button>
+      <button class="tab" role="tab" data-kind="weekly" aria-selected="false">週間</button>
+      <button class="tab" role="tab" data-kind="monthly" aria-selected="false">月間</button>
+    </div>
+    <ul class="entries" id="entries"></ul>
+    <ul class="toc" id="toc"></ul>
+  </nav>
+
+  <main class="column">
+    <div class="doc" id="doc"><p class="state">読み込み中…</p></div>
+  </main>
+
+  <footer class="colophon">
+    <span>複数ソースを突き合わせ、論調が割れた点は断定せず争点として併記しています。</span>
+    <span><a href="https://github.com/neokiwarui/news-pickup">GitHub</a> ／ 平日朝7時更新</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var REPO = 'neokiwarui/news-pickup';
+  var BRANCH = 'main';
+  var WD = ['日','月','火','水','木','金','土'];
+  var KINDS = { daily: '日次', weekly: '週間', monthly: '月間' };
+
+  var elDoc = document.getElementById('doc');
+  var elEntries = document.getElementById('entries');
+  var elToc = document.getElementById('toc');
+  var elTitle = document.getElementById('title');
+  var elMeta = document.getElementById('meta');
+  var elKind = document.getElementById('kind');
+
+  var index = { daily: [], weekly: [], monthly: [] };
+  var activeKind = 'daily';
+  var activePath = '';
+
+  /* ---------- markdown ---------- */
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function unesc(h) {
+    return h.replace(/&lt;(\/?)(sub|b|br|em|strong|code)((?:\s[^&]*?)?)\/?&gt;/g, '<$1$2$3>');
+  }
+  function inline(s) {
+    var h = esc(s);
+    h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+    return unesc(h);
+  }
+  function slug(s) {
+    return 's-' + s.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase();
+  }
+  function isTableSep(l) { return /^\|[\s:|-]+\|?\s*$/.test(l) && l.indexOf('-') > -1; }
+  function cells(l) {
+    return l.replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+  }
+
+  function render(md) {
+    var lines = md.replace(/\r/g, '').split('\n');
+    var out = [], toc = [], i = 0;
+    var head = { title: '', meta: '' };
+
+    // 先頭の h1 と直後の <sub> を題字に回す
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i < lines.length && /^#\s+/.test(lines[i])) { head.title = lines[i].replace(/^#\s+/, '').trim(); i++; }
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i < lines.length && /^<sub>/.test(lines[i].trim())) {
+      head.meta = lines[i].trim().replace(/<\/?sub>/g, '').trim(); i++;
+    }
+
+    while (i < lines.length) {
+      var L = lines[i];
+
+      if (!L.trim()) { i++; continue; }
+
+      // GFM アラート
+      var m = L.match(/^>\s*\[!(NOTE|IMPORTANT|WARNING|TIP|CAUTION)\]\s*$/i);
+      if (m) {
+        var kind = m[1].toLowerCase(); i++;
+        var body = [];
+        while (i < lines.length && /^>/.test(lines[i])) { body.push(lines[i].replace(/^>\s?/, '')); i++; }
+        var label = { note: '注記', important: '今日これだけは', warning: '注意',
+                      tip: 'ヒント', caution: '警告' }[kind];
+        var first = body.length ? body[0] : '';
+        var lm = first.match(/^\*\*(.+?)\*\*\s*(.*)$/);
+        if (lm && lm[1].length <= 16) { label = lm[1]; body[0] = lm[2]; }
+        var paras = body.join('\n').split(/\n\s*\n/).filter(function (p) { return p.trim(); });
+        out.push('<div class="alert ' + kind + '"><span class="alert-k">' + esc(label) + '</span>' +
+                 paras.map(function (p) { return '<p>' + inline(p.replace(/\n/g, ' ')) + '</p>'; }).join('') + '</div>');
+        continue;
+      }
+
+      // 表
+      if (/^\|/.test(L) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+        var head2 = cells(L); i += 2;
+        var rows = [];
+        while (i < lines.length && /^\|/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+        out.push('<div class="table-wrap wide"><table><thead><tr>' +
+          head2.map(function (c) { return '<th scope="col">' + inline(c) + '</th>'; }).join('') +
+          '</tr></thead><tbody>' +
+          rows.map(function (r) {
+            return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>';
+          }).join('') + '</tbody></table></div>');
+        continue;
+      }
+
+      // 見出し
+      var hm = L.match(/^(#{2,4})\s+(.*)$/);
+      if (hm) {
+        var lv = hm[1].length, txt = hm[2].trim();
+        var id = slug(txt);
+        out.push('<h' + lv + ' id="' + id + '">' + inline(txt) + '</h' + lv + '>');
+        if (lv === 2) toc.push({ id: id, text: txt });
+        i++; continue;
+      }
+
+      // 罫
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(L)) { out.push('<hr>'); i++; continue; }
+
+      // 生HTML行（<details> <summary> </details> <sub> など）
+      if (/^\s*<\/?[a-z]/i.test(L) && /$/.test(L)) {
+        var t = L.trim();
+        if (/^<(details|\/details|summary|\/summary|sub|\/sub|br)/i.test(t)) {
+          out.push(t); i++; continue;
+        }
+      }
+
+      // リスト
+      if (/^\s*[-*]\s+/.test(L) || /^\s*\d+[.)]\s+/.test(L)) {
+        var ordered = /^\s*\d+[.)]\s+/.test(L);
+        var items = [];
+        while (i < lines.length && (/^\s*[-*]\s+/.test(lines[i]) || /^\s*\d+[.)]\s+/.test(lines[i]))) {
+          var t2 = lines[i].replace(/^\s*(?:[-*]|\d+[.)])\s+/, '');
+          i++;
+          while (i < lines.length && /^\s{2,}\S/.test(lines[i]) &&
+                 !/^\s*(?:[-*]|\d+[.)])\s+/.test(lines[i])) { t2 += lines[i].trim(); i++; }
+          items.push(t2);
+        }
+        var fm = items.map(function (t3) { return t3.match(/^\*\*(.+?)\*\*\s*[:：]\s*([\s\S]*)$/); });
+        if (!ordered && fm.length >= 2 && fm.every(Boolean)) {
+          out.push('<div class="fields">' + fm.map(function (f) {
+            var key = /なぜ重要/.test(f[1]) ? ' key' : '';
+            return '<div class="field' + key + '"><div class="field-k">' + inline(f[1]) +
+                   '</div><div class="field-v">' + inline(f[2]) + '</div></div>';
+          }).join('') + '</div>');
+        } else {
+          var tag = ordered ? 'ol' : 'ul';
+          out.push('<' + tag + '>' + items.map(function (t4) {
+            return '<li>' + inline(t4) + '</li>';
+          }).join('') + '</' + tag + '>');
+        }
+        continue;
+      }
+
+      // 段落
+      var buf = [];
+      while (i < lines.length && lines[i].trim() &&
+             !/^(#{1,4}\s|>|\||\s*[-*]\s|\s*\d+[.)]\s|(-{3,}|\*{3,}|_{3,})\s*$)/.test(lines[i]) &&
+             !/^\s*<\/?[a-z]/i.test(lines[i])) { buf.push(lines[i].trim()); i++; }
+      if (buf.length) {
+        var text = buf.join(' ');
+        var cls = /^出典\s*[:：]/.test(text) ? ' class="sources"' : '';
+        out.push('<p' + cls + '>' + inline(text) + '</p>');
+      } else { i++; }
+    }
+
+    return { html: out.join('\n'), toc: toc, head: head };
+  }
+
+  /* ---------- 表示名 ---------- */
+
+  function labelFor(path) {
+    var m;
+    if ((m = path.match(/daily\/\d{4}\/\d{2}\/(\d{4})-(\d{2})-(\d{2})\.md$/))) {
+      var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+      return { list: m[2] + '/' + m[3] + '（' + WD[d.getUTCDay()] + '）',
+               big: (+m[2]) + '月' + (+m[3]) + '日', wd: WD[d.getUTCDay()], year: m[1] };
+    }
+    if ((m = path.match(/weekly\/(\d{4})-W(\d{2})\.md$/))) {
+      return { list: m[1] + ' 第' + (+m[2]) + '週', big: '第' + (+m[2]) + '週', wd: '', year: m[1] };
+    }
+    if ((m = path.match(/monthly\/(\d{4})-(\d{2})\.md$/))) {
+      return { list: m[1] + '年' + (+m[2]) + '月', big: (+m[2]) + '月', wd: '', year: m[1] };
+    }
+    return { list: path, big: path, wd: '', year: '' };
+  }
+
+  /* ---------- データ ---------- */
+
+  function loadIndex() {
+    var cached = null;
+    try { cached = sessionStorage.getItem('np-tree'); } catch (e) {}
+    if (cached) return Promise.resolve(JSON.parse(cached));
+    return fetch('https://api.github.com/repos/' + REPO + '/git/trees/' + BRANCH + '?recursive=1')
+      .then(function (r) {
+        if (!r.ok) throw new Error('GitHub API ' + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        var paths = (j.tree || []).filter(function (t) {
+          return t.type === 'blob' && /\.md$/.test(t.path) &&
+                 /^(daily|weekly|monthly)\//.test(t.path);
+        }).map(function (t) { return t.path; });
+        try { sessionStorage.setItem('np-tree', JSON.stringify(paths)); } catch (e) {}
+        return paths;
+      });
+  }
+
+  function buildIndex(paths) {
+    index = { daily: [], weekly: [], monthly: [] };
+    paths.forEach(function (p) {
+      var k = p.split('/')[0];
+      if (index[k]) index[k].push(p);
+    });
+    Object.keys(index).forEach(function (k) {
+      index[k].sort().reverse();
+    });
+  }
+
+  function drawEntries() {
+    var list = index[activeKind];
+    if (!list.length) {
+      elEntries.innerHTML = '<li class="none">' + KINDS[activeKind] + 'はまだありません</li>';
+      return;
+    }
+    elEntries.innerHTML = list.map(function (p) {
+      var cur = p === activePath ? ' aria-current="true"' : '';
+      return '<li><button type="button" data-path="' + p + '"' + cur + '>' +
+             labelFor(p).list + '</button></li>';
+    }).join('');
+  }
+
+  function drawToc(toc) {
+    if (!toc.length) { elToc.innerHTML = ''; return; }
+    elToc.innerHTML = toc.map(function (t) {
+      return '<li><a href="#' + t.id + '">' + esc(t.text) + '</a></li>';
+    }).join('');
+    spy(toc);
+  }
+
+  var observer = null;
+  function spy(toc) {
+    if (observer) observer.disconnect();
+    if (!('IntersectionObserver' in window)) return;
+    var links = {};
+    elToc.querySelectorAll('a').forEach(function (a) {
+      links[a.getAttribute('href').slice(1)] = a;
+    });
+    observer = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var a = links[e.target.id];
+        if (!a) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.remove('on'); });
+        a.classList.add('on');
+      });
+    }, { rootMargin: '-10% 0px -75% 0px' });
+    toc.forEach(function (t) {
+      var el = document.getElementById(t.id);
+      if (el) observer.observe(el);
+    });
+  }
+
+  function show(path) {
+    activePath = path;
+    activeKind = path.split('/')[0];
+    document.querySelectorAll('.tab').forEach(function (b) {
+      b.setAttribute('aria-selected', String(b.dataset.kind === activeKind));
+    });
+    drawEntries();
+    elDoc.innerHTML = '<p class="state">読み込み中…</p>';
+
+    fetch(path, { cache: 'no-cache' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status + ' ' + path);
+        return r.text();
+      })
+      .then(function (md) {
+        var r2 = render(md);
+        elDoc.innerHTML = r2.html;
+        var lab = labelFor(path);
+        elKind.textContent = 'NEWS PICK UP ／ ' + KINDS[activeKind];
+        elTitle.innerHTML = esc(lab.big) + (lab.wd ? '<span class="wd">' + lab.wd + '</span>' : '');
+        elMeta.textContent = r2.head.meta || lab.year + '年';
+        document.title = lab.list + ' — NEWS Pick Up';
+        drawToc(r2.toc);
+        window.scrollTo(0, 0);
+      })
+      .catch(function (e) {
+        elDoc.innerHTML = '<p class="state">読み込めませんでした。<br><code>' +
+          esc(String(e.message)) + '</code></p>';
+      });
+  }
+
+  /* ---------- 起動 ---------- */
+
+  document.querySelector('.tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (!b) return;
+    activeKind = b.dataset.kind;
+    document.querySelectorAll('.tab').forEach(function (x) {
+      x.setAttribute('aria-selected', String(x === b));
+    });
+    drawEntries();
+    if (index[activeKind].length) {
+      location.hash = 'p=' + index[activeKind][0];
+    }
+  });
+
+  elEntries.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-path]');
+    if (b) location.hash = 'p=' + b.dataset.path;
+  });
+
+  function route() {
+    var m = location.hash.match(/^#p=(.+)$/);
+    if (m) { show(decodeURIComponent(m[1])); return; }
+    var first = index.daily[0] || index.weekly[0] || index.monthly[0];
+    if (first) show(first);
+    else elDoc.innerHTML = '<p class="state">まだレポートがありません。<b>平日の朝7時</b>に最初の日次が入ります。</p>';
+  }
+
+  window.addEventListener('hashchange', route);
+
+  loadIndex()
+    .then(function (paths) { buildIndex(paths); drawEntries(); route(); })
+    .catch(function (e) {
+      elTitle.textContent = 'NEWS Pick Up';
+      elDoc.innerHTML = '<p class="state">記事一覧を取得できませんでした。<br>' +
+        '<code>' + esc(String(e.message)) + '</code><br>' +
+        'GitHub API の時間あたり上限に当たった可能性があります。しばらく待って再読み込みしてください。</p>';
+    });
+})();
+</script>
+</body>
+</html>
